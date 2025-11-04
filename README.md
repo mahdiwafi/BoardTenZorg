@@ -128,7 +128,3 @@ Edge -> API/DB: validate scores, apply Elo, update ratings
 * **Happy path**: Admin registers CH URL, exports list, runs **Finish & Calculate**, leaderboard updates; user sees matches & deltas.
 * **Correctness**: sample 5 matches, recompute Elo offline, compare to `rating_events`.
 * **Perf**: import+rate 128‑player bracket within a few seconds.
-
-## Need Professional Help in Developing Your Architecture?
-
-Please contact me at [sammuti.com](https://sammuti.com) :)

@@ -20,6 +20,7 @@ export function SignUpForm(props: SignUpFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -35,6 +36,19 @@ export function SignUpForm(props: SignUpFormProps) {
         password,
         redirectTo: `${window.location.origin}/profile`,
       });
+
+      if (username) {
+        await fetch("/api/profile/identity", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ username }),
+        }).catch(() => {
+          // Ignore errors; user can complete profile later.
+        });
+      }
+
       router.push("/auth/sign-up-success");
     },
   );
@@ -50,6 +64,11 @@ export function SignUpForm(props: SignUpFormProps) {
     }
 
     setLocalError(null);
+    if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+      setLocalError("Username must be 3-20 characters (letters, numbers, underscore).");
+      return;
+    }
+
     await submitSignUp({ email, password });
   };
 
@@ -89,6 +108,22 @@ export function SignUpForm(props: SignUpFormProps) {
             value={email}
             onChange={handleFieldChange(setEmail)}
           />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="username">Username</Label>
+          <Input
+            id="username"
+            required
+            value={username}
+            onChange={handleFieldChange(setUsername)}
+            placeholder="lowercase, 3-20 chars"
+            pattern="^[a-z0-9_]{3,20}$"
+            minLength={3}
+            maxLength={20}
+          />
+          <p className="text-xs text-muted-foreground">
+            Lowercase letters, numbers, underscores. Used on leaderboards.
+          </p>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="password">Password</Label>
