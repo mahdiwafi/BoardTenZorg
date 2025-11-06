@@ -1,46 +1,40 @@
 "use client";
 
-import { useState } from "react";
-
 import { Button } from "@/components/ui/button";
+import { useAsyncAction } from "@/lib/hooks/use-async-action";
 
 type ParticipantsExportProps = {
   tournamentId: string;
 };
 
 export function ParticipantsExport({ tournamentId }: ParticipantsExportProps) {
-  const [isLoading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    error,
+    isLoading,
+    result: message,
+    run: exportParticipants,
+  } = useAsyncAction(async () => {
+    const response = await fetch(`/api/tournaments/${tournamentId}/participants`, {
+      method: "GET",
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(payload?.error ?? "Unable to export list.");
+    }
+
+    const text = await response.text();
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      return "Copied to clipboard.";
+    }
+
+    console.info(text);
+    return "List generated. Copy manually from the console output.";
+  });
 
   async function handleExport() {
-    setLoading(true);
-    setMessage(null);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/participants`, {
-        method: "GET",
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? "Unable to export list.");
-      }
-
-      const text = await response.text();
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(text);
-        setMessage("Copied to clipboard.");
-      } else {
-        setMessage("List generated. Copy manually:");
-        console.info(text);
-      }
-    } catch (apiError) {
-      setError(apiError instanceof Error ? apiError.message : "Unexpected error.");
-    } finally {
-      setLoading(false);
-    }
+    await exportParticipants();
   }
 
   return (

@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { generatePublicId } from "@/lib/id";
+import {
+  ensureProfileRecord,
+  findUserByUsername,
+  type SupabaseServerClient,
+} from "@/lib/boardtenzorg";
 import { createClient } from "@/lib/supabase/server";
-
-const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
+import { USERNAME_PATTERN, USERNAME_REQUIREMENTS } from "@/lib/constants/username";
 
 type IdentityRequestBody = {
   username?: string;
@@ -24,93 +27,43 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const rawUsername = payload.username?.trim();
+  const rawUsername = payload.username?.trim().toLowerCase();
   if (!rawUsername || !USERNAME_PATTERN.test(rawUsername)) {
-    return NextResponse.json(
-      { error: "Username must be 3-20 characters (lowercase letters, digits, underscores)." },
-      { status: 422 },
-    );
+    return NextResponse.json({ error: USERNAME_REQUIREMENTS }, { status: 422 });
   }
 
-  const username = rawUsername.toLowerCase();
+  try {
+    const duplicate = await findUserByUsername(supabase, rawUsername);
+    if (duplicate && duplicate.auth_user_id !== session.user.id) {
+      return NextResponse.json({ error: "Username already taken." }, { status: 409 });
+    }
 
-  const { data: duplicate, error: duplicateError } = await supabase
-    .from("users")
-    .select("id, auth_user_id")
-    .eq("username", username)
-    .maybeSingle();
+    const profile = await ensureProfileRecord(supabase, session.user.id);
 
-  if (duplicateError) {
-    return NextResponse.json({ error: duplicateError.message }, { status: 500 });
-  }
-
-  if (duplicate && duplicate.auth_user_id !== session.user.id) {
-    return NextResponse.json({ error: "Username already taken." }, { status: 409 });
-  }
-
-  const { data: existing, error: existingError } = await supabase
-    .from("users")
-    .select("id, username")
-    .eq("auth_user_id", session.user.id)
-    .maybeSingle();
-
-  if (existingError) {
-    return NextResponse.json({ error: existingError.message }, { status: 500 });
-  }
-
-  let recordId = existing?.id;
-
-  if (!existing) {
-    let generatedId: string | null = null;
-
-    for (let attempts = 0; attempts < 10; attempts += 1) {
-      const candidate = generatePublicId(5);
-      const { data: taken, error: takenError } = await supabase
+    if (profile.username !== rawUsername) {
+      const { error: updateError } = await supabase
         .from("users")
-        .select("id")
-        .eq("id", candidate)
-        .maybeSingle();
+        .update({ username: rawUsername })
+        .eq("id", profile.id);
 
-      if (takenError) {
-        return NextResponse.json({ error: takenError.message }, { status: 500 });
-      }
-
-      if (!taken) {
-        generatedId = candidate;
-        break;
+      if (updateError) {
+        return NextResponse.json({ error: updateError.message }, { status: 500 });
       }
     }
 
-    if (!generatedId) {
-      return NextResponse.json({ error: "Could not generate user id." }, { status: 500 });
-    }
+    await ensureActiveSeasonRating(supabase, profile.id);
 
-    const { error: insertError } = await supabase.from("users").insert({
-      id: generatedId,
-      auth_user_id: session.user.id,
-      username,
-    });
-
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
-    }
-
-    recordId = generatedId;
-  } else if (existing.username !== username) {
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({ username })
-      .eq("id", existing.id);
-
-    if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
-    }
+    return NextResponse.json({ id: profile.id, username: rawUsername });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
+}
 
-  if (!recordId) {
-    return NextResponse.json({ error: "Unknown error." }, { status: 500 });
-  }
-
+async function ensureActiveSeasonRating(
+  supabase: SupabaseServerClient,
+  userId: string,
+) {
   const { data: activeSeason, error: seasonError } = await supabase
     .from("seasons")
     .select("id")
@@ -120,24 +73,24 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (seasonError) {
-    return NextResponse.json({ error: seasonError.message }, { status: 500 });
+    throw new Error(seasonError.message);
   }
 
-  if (activeSeason) {
-    const { error: ratingError } = await supabase
-      .from("player_season_ratings")
-      .upsert(
-        {
-          user_id: recordId,
-          season_id: activeSeason.id,
-        },
-        { onConflict: "user_id,season_id", ignoreDuplicates: true },
-      );
-
-    if (ratingError) {
-      return NextResponse.json({ error: ratingError.message }, { status: 500 });
-    }
+  if (!activeSeason) {
+    return;
   }
 
-  return NextResponse.json({ id: recordId, username });
+  const { error: ratingError } = await supabase
+    .from("player_season_ratings")
+    .upsert(
+      {
+        user_id: userId,
+        season_id: activeSeason.id,
+      },
+      { onConflict: "user_id,season_id", ignoreDuplicates: true },
+    );
+
+  if (ratingError) {
+    throw new Error(ratingError.message);
+  }
 }

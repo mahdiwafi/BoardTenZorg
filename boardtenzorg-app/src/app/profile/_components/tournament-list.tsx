@@ -5,44 +5,45 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import type { TournamentWithRegistration } from "@/lib/boardtenzorg";
+import { useAsyncAction } from "@/lib/hooks/use-async-action";
 
 type TournamentListProps = {
   tournaments: TournamentWithRegistration[];
 };
 
 export function TournamentList({ tournaments }: TournamentListProps) {
-  const [pending, setPending] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const router = useRouter();
+
+  const {
+    error,
+    isLoading,
+    result: message,
+    run: registerTournament,
+    reset,
+  } = useAsyncAction(async (tournamentId: string) => {
+    const response = await fetch(`/api/tournaments/${tournamentId}/register`, {
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(payload?.error ?? "Unable to register.");
+    }
+
+    router.refresh();
+    return "Registered!";
+  });
 
   async function handleRegister(tournamentId: string) {
     if (!tournamentId) {
-      setError("Tournament id missing.");
+      reset();
       return;
     }
 
-    setPending(tournamentId);
-    setError(null);
-    setMessage(null);
-
-    try {
-      const response = await fetch(`/api/tournaments/${tournamentId}/register`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? "Unable to register.");
-      }
-
-      setMessage("Registered!");
-      router.refresh();
-    } catch (apiError) {
-      setError(apiError instanceof Error ? apiError.message : "Unexpected error.");
-    } finally {
-      setPending(null);
-    }
+    setPendingId(tournamentId);
+    await registerTournament(tournamentId);
+    setPendingId(null);
   }
 
   return (
@@ -66,15 +67,23 @@ export function TournamentList({ tournaments }: TournamentListProps) {
                 </a>
               </p>
               <p className="mt-1 text-xs uppercase text-muted-foreground">
-                Status: {tournament.state} • Registered players: {tournament.player_count}
+                Status: {tournament.state} | Registered players: {tournament.player_count}
               </p>
             </div>
             <div className="flex items-center gap-3">
               <Button
                 onClick={() => handleRegister(tournament.id)}
-                disabled={tournament.isRegistered || tournament.state !== "registered" || pending === tournament.id}
+                disabled={
+                  tournament.isRegistered ||
+                  tournament.state !== "registered" ||
+                  (isLoading && pendingId === tournament.id)
+                }
               >
-                {tournament.isRegistered ? "Registered" : pending === tournament.id ? "Joining..." : "Register"}
+                {tournament.isRegistered
+                  ? "Registered"
+                  : isLoading && pendingId === tournament.id
+                    ? "Joining..."
+                    : "Register"}
               </Button>
             </div>
           </div>

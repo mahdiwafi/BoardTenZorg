@@ -41,7 +41,7 @@ export async function AuthButton() {
       <Link href="/profile" className="font-medium hover:underline">
         {profile ? displayLabel : fallbackLabel}
       </Link>
-      <span className="text-border">•</span>
+      <span className="text-border">|</span>
       <LogoutButton />
     </div>
   );

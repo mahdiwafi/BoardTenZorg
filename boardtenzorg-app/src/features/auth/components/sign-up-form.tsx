@@ -11,10 +11,18 @@ import { Label } from "@/components/ui/label";
 import { AuthCard } from "@/features/auth/components/auth-card";
 import { signUpWithEmail } from "@/features/auth/lib/auth-service";
 import { useAsyncAction } from "@/lib/hooks/use-async-action";
+import {
+  USERNAME_HELP_TEXT,
+  USERNAME_PATTERN,
+  USERNAME_REQUIREMENTS,
+} from "@/lib/constants/username";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-type SignUpFormProps = ComponentPropsWithoutRef<typeof AuthCard>;
+type SignUpFormProps = Omit<
+  ComponentPropsWithoutRef<typeof AuthCard>,
+  "title" | "description" | "children" | "footer"
+>;
 
 export function SignUpForm(props: SignUpFormProps) {
   const [email, setEmail] = useState("");
@@ -64,8 +72,8 @@ export function SignUpForm(props: SignUpFormProps) {
     }
 
     setLocalError(null);
-    if (!/^[a-z0-9_]{3,20}$/.test(username)) {
-      setLocalError("Username must be 3-20 characters (letters, numbers, underscore).");
+    if (!USERNAME_PATTERN.test(username)) {
+      setLocalError(USERNAME_REQUIREMENTS);
       return;
     }
 
@@ -115,15 +123,14 @@ export function SignUpForm(props: SignUpFormProps) {
             id="username"
             required
             value={username}
-            onChange={handleFieldChange(setUsername)}
-            placeholder="lowercase, 3-20 chars"
-            pattern="^[a-z0-9_]{3,20}$"
-            minLength={3}
-            maxLength={20}
-          />
-          <p className="text-xs text-muted-foreground">
-            Lowercase letters, numbers, underscores. Used on leaderboards.
-          </p>
+          onChange={handleFieldChange(setUsername)}
+          placeholder="lowercase, 3-20 chars"
+          pattern={USERNAME_PATTERN.source}
+          title={USERNAME_REQUIREMENTS}
+          minLength={3}
+          maxLength={20}
+        />
+        <p className="text-xs text-muted-foreground">{USERNAME_HELP_TEXT}</p>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="password">Password</Label>

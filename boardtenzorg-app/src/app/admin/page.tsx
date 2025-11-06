@@ -109,7 +109,7 @@ export default async function AdminPage() {
                         </a>
                       </p>
                       <p className="text-xs uppercase text-muted-foreground">
-                        Status: {tournament.state} • Registered players: {tournament.player_count}
+                        Status: {tournament.state} | Registered players: {tournament.player_count}
                       </p>
                     </div>
                     <div className="flex flex-col gap-4 md:w-64">

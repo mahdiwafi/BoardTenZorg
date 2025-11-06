@@ -1,27 +1,26 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAsyncAction } from "@/lib/hooks/use-async-action";
 
 export function CreateTournamentForm() {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [isSubmitting, setSubmitting] = useState(false);
   const router = useRouter();
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setSubmitting(true);
-
-    try {
+  const {
+    error,
+    isLoading,
+    result: successMessage,
+    run: submitTournament,
+    reset,
+  } = useAsyncAction(
+    async ({ name, url }: { name: string; url: string }) => {
       const response = await fetch("/api/tournaments", {
         method: "POST",
         headers: {
@@ -38,16 +37,27 @@ export function CreateTournamentForm() {
         throw new Error(payload?.error ?? "Unable to create tournament.");
       }
 
-      setSuccess("Tournament created.");
+      router.refresh();
+      return "Tournament created.";
+    },
+  );
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const outcome = await submitTournament({ name, url });
+    if (outcome) {
       setName("");
       setUrl("");
-      router.refresh();
-    } catch (apiError) {
-      setError(apiError instanceof Error ? apiError.message : "Unexpected error.");
-    } finally {
-      setSubmitting(false);
     }
   }
+
+  const handleFieldChange =
+    (setter: (value: string) => void) => (event: ChangeEvent<HTMLInputElement>) => {
+      if (error || successMessage) {
+        reset();
+      }
+      setter(event.target.value);
+    };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border bg-card p-6">
@@ -64,7 +74,7 @@ export function CreateTournamentForm() {
           <Input
             id="tournament-name"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={handleFieldChange(setName)}
             required
             minLength={3}
             placeholder="BoardTenZorg Weekly #42"
@@ -76,7 +86,7 @@ export function CreateTournamentForm() {
             id="tournament-url"
             type="url"
             value={url}
-            onChange={(event) => setUrl(event.target.value)}
+            onChange={handleFieldChange(setUrl)}
             required
             placeholder="https://challonge.com/boardtenzorg-test"
           />
@@ -84,10 +94,10 @@ export function CreateTournamentForm() {
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {success ? <p className="text-sm text-emerald-500">{success}</p> : null}
+      {successMessage ? <p className="text-sm text-emerald-500">{successMessage}</p> : null}
 
-      <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Saving..." : "Save tournament"}
+      <Button type="submit" disabled={isLoading}>
+        {isLoading ? "Saving..." : "Save tournament"}
       </Button>
     </form>
   );

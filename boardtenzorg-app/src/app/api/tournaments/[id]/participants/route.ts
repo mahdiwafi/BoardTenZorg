@@ -58,11 +58,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const lines = (data ?? []).map((row) => {
+  type ParticipantRow = {
+    user_id: string;
+    challonge_display_name: string | null;
+    users: { username: string | null } | { username: string | null }[] | null;
+  };
+
+  const participantRows = (data ?? []) as ParticipantRow[];
+
+  const lines = participantRows.map((row) => {
     if (row.challonge_display_name) {
       return row.challonge_display_name;
     }
-    const username = row.users?.username ?? "Unknown";
+
+    const userRecord = Array.isArray(row.users) ? row.users[0] ?? null : row.users;
+    const username = userRecord?.username ?? "Unknown";
+
     return `[${row.user_id}] ${username}`;
   });
 

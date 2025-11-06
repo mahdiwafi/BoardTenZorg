@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { useAsyncAction } from "@/lib/hooks/use-async-action";
 
 type RateTournamentButtonProps = {
   tournamentId: string;
@@ -24,37 +25,47 @@ async function invokeRate(tournamentId: string, rerun: boolean) {
 }
 
 export function RateTournamentButton({ tournamentId, state }: RateTournamentButtonProps) {
-  const [isRating, setIsRating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const [pendingAction, setPendingAction] = useState<"finish" | "rerun" | null>(null);
+
+  const {
+    error,
+    isLoading,
+    run: triggerRating,
+  } = useAsyncAction(async ({ rerun }: { rerun: boolean }) => {
+    await invokeRate(tournamentId, rerun);
+    router.refresh();
+  });
 
   async function handleRate(rerun: boolean) {
-    setIsRating(true);
-    setError(null);
-    try {
-      await invokeRate(tournamentId, rerun);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected error.");
-    } finally {
-      setIsRating(false);
+    setPendingAction(rerun ? "rerun" : "finish");
+    await triggerRating({ rerun });
+  }
+
+  const isPending = (action: "finish" | "rerun") => isLoading && pendingAction === action;
+
+  function getButtonLabel(action: "finish" | "rerun") {
+    if (!isPending(action)) {
+      return action === "finish" ? "Finish & calculate" : "Re-run Elo";
     }
+
+    return action === "finish" ? "Starting job..." : "Re-running...";
   }
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => handleRate(false)} disabled={isRating}>
-          {isRating ? "Starting job..." : "Finish & calculate"}
+        <Button onClick={() => handleRate(false)} disabled={isPending("finish")}>
+          {getButtonLabel("finish")}
         </Button>
         {state === "rated" ? (
           <Button
             type="button"
             variant="outline"
             onClick={() => handleRate(true)}
-            disabled={isRating}
+            disabled={isPending("rerun")}
           >
-            Re-run Elo
+            {getButtonLabel("rerun")}
           </Button>
         ) : null}
       </div>

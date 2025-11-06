@@ -7,6 +7,8 @@ import {
   getCurrentUserRoles,
   getPlayerSeasonStats,
   listTournamentsForUser,
+  type PlayerSeasonStats,
+  type TournamentWithRegistration,
 } from "@/lib/boardtenzorg";
 import { createClient } from "@/lib/supabase/server";
 
@@ -29,8 +31,8 @@ export default async function ProfilePage() {
     getActiveSeasonId(),
   ]);
 
-  let tournaments = [];
-  let stats = { rating: 1000, matches_played: 0 };
+  let tournaments: TournamentWithRegistration[] = [];
+  let stats: PlayerSeasonStats = { rating: 1000, matches_played: 0 };
 
   if (profile && seasonId) {
     const [seasonTournaments, seasonStats] = await Promise.all([
@@ -62,7 +64,7 @@ export default async function ProfilePage() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Player ID</dt>
-                <dd className="font-mono text-base">{profile?.id ?? "—"}</dd>
+                <dd className="font-mono text-base">{profile?.id ?? "Pending"}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Season rating</dt>
@@ -82,7 +84,7 @@ export default async function ProfilePage() {
             {isAdmin ? (
               <div className="mt-4">
                 <Link href="/admin" className="text-sm font-medium text-primary hover:underline">
-                  Open admin console →
+                  Open admin console -&gt;
                 </Link>
               </div>
             ) : null}
