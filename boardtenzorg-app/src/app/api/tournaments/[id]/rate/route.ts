@@ -84,7 +84,9 @@ export async function POST(request: Request) {
   });
 
   if (invokeError) {
-    return NextResponse.json({ error: invokeError.message }, { status: 500 });
+    const context = (invokeError as { context?: { error?: string } }).context;
+    const message = context?.error ?? invokeError.message;
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });
