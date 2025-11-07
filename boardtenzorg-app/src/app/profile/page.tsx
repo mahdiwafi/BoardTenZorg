@@ -81,13 +81,16 @@ export default async function ProfilePage() {
                 </dd>
               </div>
             </dl>
-            {isAdmin ? (
-              <div className="mt-4">
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Link href="/profile/history" className="text-sm font-medium text-primary hover:underline">
+                View match history -&gt;
+              </Link>
+              {isAdmin ? (
                 <Link href="/admin" className="text-sm font-medium text-primary hover:underline">
                   Open admin console -&gt;
                 </Link>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </div>
 

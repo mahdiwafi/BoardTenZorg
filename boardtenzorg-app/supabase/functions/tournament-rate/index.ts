@@ -1,4 +1,5 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { applyElo, type EloStage } from "../../../src/lib/elo.ts";
 
 type Payload = {
   tournamentId?: string;
@@ -25,6 +26,7 @@ type ChallongeMatch = {
     completed_at: string | null;
     updated_at: string | null;
     started_at: string | null;
+    round: number | null;
     state: string;
   };
 };
@@ -36,26 +38,6 @@ type RatingState = {
 };
 
 const CHALLONGE_API_BASE = "https://api.challonge.com/v1";
-
-const applyElo = ({
-  ratingA,
-  ratingB,
-  scoreA,
-  kFactor,
-}: {
-  ratingA: number;
-  ratingB: number;
-  scoreA: 0 | 1;
-  kFactor: number;
-}) => {
-  const expectedA = 1 / (1 + 10 ** ((ratingB - ratingA) / 400));
-  const deltaA = Math.round(kFactor * (scoreA - expectedA));
-  return {
-    deltaA,
-    newRatingA: ratingA + deltaA,
-    newRatingB: ratingB - deltaA,
-  };
-};
 
 Deno.serve(async (request) => {
   try {
@@ -98,13 +80,13 @@ Deno.serve(async (request) => {
     if (!season) {
       return respond(400, { error: "Season not found for tournament." });
     }
-    const kFactor = season.k_factor ?? 32;
+    const kFactor = season.k_factor ?? 28;
 
     const registeredPlayers = await loadTournamentPlayers(supabase, payload.tournamentId);
-  const participants = await fetchChallonge<ChallongeParticipant[]>(
-    `${CHALLONGE_API_BASE}/tournaments/${encodeURIComponent(slug)}/participants.json`,
-    env.CHALLONGE_API_KEY,
-  );
+    const participants = await fetchChallonge<ChallongeParticipant[]>(
+      `${CHALLONGE_API_BASE}/tournaments/${encodeURIComponent(slug)}/participants.json`,
+      env.CHALLONGE_API_KEY,
+    );
     const participantMap = buildParticipantMap(participants, registeredPlayers);
 
     const matchesResponse = await fetchChallonge<ChallongeMatch[]>(
@@ -118,6 +100,10 @@ Deno.serve(async (request) => {
         const bDate = b.match.completed_at ?? b.match.updated_at ?? b.match.started_at ?? "";
         return new Date(aDate).getTime() - new Date(bDate).getTime();
       });
+
+    const isDoubleElimination = completedMatches.some(
+      (m) => typeof m.match.round === "number" && m.match.round < 0,
+    );
 
     // Update Challonge participant IDs on registrations.
     await syncParticipantMetadata(supabase, payload.tournamentId, participantMap);
@@ -141,6 +127,8 @@ Deno.serve(async (request) => {
     }
 
     const ratingState = await loadRatingState(supabase, playerIds, tournament.season_id);
+    const entrantsCount = Math.max(ratingState.size, participantMap.size, registeredPlayers.length, 1);
+    let currentTopRating = getCurrentTopRating(ratingState);
 
     const matchesPayload: Array<Record<string, unknown>> = [];
     const ratingEventsPayload: Array<Record<string, unknown>> = [];
@@ -183,17 +171,24 @@ Deno.serve(async (request) => {
       const prevRatingP1 = p1State.rating;
       const prevRatingP2 = p2State.rating;
 
-      const { deltaA, newRatingA, newRatingB } = applyElo({
+      const stage = deriveStage(match.round, isDoubleElimination);
+      const scoreGap = computeScoreGap(match.scores_csv);
+
+      const { deltaA, deltaB, newRatingA, newRatingB } = applyElo({
         ratingA: p1State.rating,
         ratingB: p2State.rating,
         scoreA: winnerIsP1 ? 1 : 0,
-        kFactor,
+        context: {
+          entrantsCount,
+          stage,
+          scoreGap,
+          topRating: currentTopRating,
+          baseK: kFactor,
+        },
       });
 
       const winnerRatingAfter = winnerIsP1 ? newRatingA : newRatingB;
       const loserRatingAfter = winnerIsP1 ? newRatingB : newRatingA;
-      const winnerDelta = winnerIsP1 ? deltaA : -deltaA;
-      const loserDelta = -winnerDelta;
 
       const matchId = crypto.randomUUID();
 
@@ -207,7 +202,7 @@ Deno.serve(async (request) => {
         scores_csv: match.scores_csv ?? "",
         winner_points: winnerRatingAfter,
         loser_points: loserRatingAfter,
-        score_diff: Math.abs(winnerDelta),
+        score_diff: scoreGap,
         completed_at: completedAt,
       });
 
@@ -218,7 +213,7 @@ Deno.serve(async (request) => {
           userId: p1.user_id,
           ratingBefore: p1State.rating,
           ratingAfter: newRatingA,
-          delta: winnerIsP1 ? winnerDelta : loserDelta,
+          delta: deltaA,
           kFactor,
           createdAt: completedAt,
         }),
@@ -228,7 +223,7 @@ Deno.serve(async (request) => {
           userId: p2.user_id,
           ratingBefore: p2State.rating,
           ratingAfter: newRatingB,
-          delta: winnerIsP1 ? loserDelta : winnerDelta,
+          delta: deltaB,
           kFactor,
           createdAt: completedAt,
         }),
@@ -244,6 +239,7 @@ Deno.serve(async (request) => {
       if (newRatingB !== prevRatingP2) {
         p2State.firstReached = completedAt;
       }
+      currentTopRating = getCurrentTopRating(ratingState);
     }
 
     if (matchesPayload.length === 0) {
@@ -490,6 +486,54 @@ function createRatingEvent({
     k_factor: kFactor,
     created_at: createdAt,
   };
+}
+
+function getCurrentTopRating(ratingState: Map<string, RatingState>): number {
+  let top = 1000;
+  for (const state of ratingState.values()) {
+    top = Math.max(top, state.rating);
+  }
+  return top;
+}
+
+function computeScoreGap(scoresCsv: string | null): number {
+  if (!scoresCsv) return 1;
+  const segments = scoresCsv
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (segments.length === 0) return 1;
+
+  let playerOneTotal = 0;
+  let playerTwoTotal = 0;
+  for (const segment of segments) {
+    const [aRaw, bRaw] = segment.split("-");
+    const a = Number(aRaw);
+    const b = Number(bRaw);
+    if (Number.isFinite(a) && Number.isFinite(b)) {
+      playerOneTotal += a;
+      playerTwoTotal += b;
+    }
+  }
+
+  const diff = Math.abs(playerOneTotal - playerTwoTotal);
+  return Math.max(diff, 1);
+}
+
+function deriveStage(round: number | null | undefined, isDoubleElimination: boolean): EloStage {
+  if (!isDoubleElimination) {
+    return "RR";
+  }
+  if (round === 0) {
+    return "GF";
+  }
+  if (typeof round === "number" && round < 0) {
+    return "DE_LB";
+  }
+  if (typeof round === "number" && round > 0) {
+    return "DE_UB";
+  }
+  return "RR";
 }
 
 async function persistRatingState(

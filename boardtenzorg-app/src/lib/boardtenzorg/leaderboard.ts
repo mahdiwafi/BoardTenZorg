@@ -71,11 +71,11 @@ export async function getLeaderboard(
 export async function getPlayerHistory(
   seasonId: string,
   userId: string,
-  limit = 100,
+  limit?: number,
 ) {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("rating_events")
     .select(
       `
@@ -98,8 +98,13 @@ export async function getPlayerHistory(
     )
     .eq("season_id", seasonId)
     .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .order("created_at", { ascending: false });
+
+  if (typeof limit === "number") {
+    query = query.limit(limit);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);
