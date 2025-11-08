@@ -1,36 +1,127 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import {
+  getActiveSeasonId,
+  getCurrentUserProfile,
+  getCurrentUserRoles,
+  getPlayerSeasonStats,
+  listTournamentsForUser,
+  type PlayerSeasonStats,
+  type TournamentWithRegistration,
+} from "@/lib/boardtenzorg";
 import { createClient } from "@/lib/supabase/server";
-import { InfoIcon } from "lucide-react";
-import { FetchDataSteps } from "@/components/tutorial/fetch-data-steps";
+
+import { TournamentList } from "@/components/tournaments/tournament-list";
+
+import { UsernameForm } from "./_components/username-form";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const { data, error } = await supabase.auth.getClaims();
-  if (error || !data?.claims) {
-    redirect("/auth/login");
+  if (!user) {
+    redirect("/auth/login?redirect=/profile");
   }
 
+  const [profile, roles, seasonId] = await Promise.all([
+    getCurrentUserProfile(),
+    getCurrentUserRoles(),
+    getActiveSeasonId(),
+  ]);
+
+  let tournaments: TournamentWithRegistration[] = [];
+  let stats: PlayerSeasonStats = { rating: 1000, matches_played: 0 };
+
+  if (profile && seasonId) {
+    const [seasonTournaments, seasonStats] = await Promise.all([
+      listTournamentsForUser(seasonId, profile.id),
+      getPlayerSeasonStats(seasonId, profile.id),
+    ]);
+
+    tournaments = seasonTournaments;
+    stats = seasonStats;
+  }
+
+  const isAdmin = roles.includes("admin");
+
   return (
-    <div className="flex-1 w-full flex flex-col gap-12">
-      <div className="w-full">
-        <div className="bg-accent text-sm p-3 px-5 rounded-md text-foreground flex gap-3 items-center">
-          <InfoIcon size="16" strokeWidth={2} />
-          This is a profile page that you can only see as an authenticated
-          user
+    <div className="space-y-12">
+      <section className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+        <div className="space-y-4">
+          <h1 className="text-2xl font-semibold">Your profile</h1>
+          <p className="text-sm text-muted-foreground">
+            Set your public username and join upcoming tournaments. Your 5-character ID is used when exporting
+            to Challonge.
+          </p>
+
+          <div className="rounded-lg border border-border bg-card p-4">
+            <dl className="grid gap-3 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Email</dt>
+                <dd className="font-medium">{user.email}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Player ID</dt>
+                <dd className="font-mono text-base">{profile?.id ?? "Pending"}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Season rating</dt>
+                <dd className="font-medium">{stats.rating}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Matches played</dt>
+                <dd className="font-medium">{stats.matches_played}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Roles</dt>
+                <dd className="font-medium capitalize">
+                  {roles.length > 0 ? roles.join(", ") : "player"}
+                </dd>
+              </div>
+            </dl>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Link href="/profile/history" className="text-sm font-medium text-primary hover:underline">
+                View match history -&gt;
+              </Link>
+              {isAdmin ? (
+                <Link href="/admin" className="text-sm font-medium text-primary hover:underline">
+                  Open admin console -&gt;
+                </Link>
+              ) : null}
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="flex flex-col gap-2 items-start">
-        <h2 className="font-bold text-2xl mb-4">Your user details</h2>
-        <pre className="text-xs font-mono p-3 rounded border max-h-32 overflow-auto">
-          {JSON.stringify(data.claims, null, 2)}
-        </pre>
-      </div>
-      <div>
-        <h2 className="font-bold text-2xl mb-4">Next steps</h2>
-        <FetchDataSteps />
-      </div>
+
+        <div>
+          <UsernameForm initialUsername={profile?.username ?? null} />
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Tournaments this month</h2>
+          <p className="text-sm text-muted-foreground">
+            Register ahead of time. Admins will export the list directly to Challonge when seeding the bracket.
+          </p>
+        </div>
+
+        {profile && seasonId ? (
+          profile.username ? (
+            <TournamentList tournaments={tournaments} />
+          ) : (
+            <div className="rounded-lg border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground">
+              Set a username first to unlock tournament registration.
+            </div>
+          )
+        ) : (
+          <div className="rounded-lg border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground">
+            Sign in and set a username to register for tournaments.
+          </div>
+        )}
+      </section>
     </div>
   );
 }

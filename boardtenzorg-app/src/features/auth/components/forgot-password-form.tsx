@@ -13,7 +13,10 @@ import { requestPasswordReset } from "@/features/auth/lib/auth-service";
 import { useAsyncAction } from "@/lib/hooks/use-async-action";
 import Link from "next/link";
 
-type ForgotPasswordFormProps = ComponentPropsWithoutRef<typeof AuthCard>;
+type ForgotPasswordFormProps = Omit<
+  ComponentPropsWithoutRef<typeof AuthCard>,
+  "title" | "description" | "children" | "footer"
+>;
 
 export function ForgotPasswordForm(props: ForgotPasswordFormProps) {
   const [email, setEmail] = useState("");

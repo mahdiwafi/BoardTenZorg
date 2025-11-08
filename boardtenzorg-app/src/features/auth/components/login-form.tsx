@@ -12,7 +12,10 @@ import { useRouter } from "next/navigation";
 
 const AUTHENTICATED_REDIRECT = "/profile";
 
-type LoginFormProps = ComponentPropsWithoutRef<typeof AuthCard>;
+type LoginFormProps = Omit<
+  ComponentPropsWithoutRef<typeof AuthCard>,
+  "title" | "description" | "children" | "footer"
+>;
 
 export function LoginForm(props: LoginFormProps) {
   const [email, setEmail] = useState("");

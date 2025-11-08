@@ -13,7 +13,10 @@ import { updatePassword } from "@/features/auth/lib/auth-service";
 import { useAsyncAction } from "@/lib/hooks/use-async-action";
 import { useRouter } from "next/navigation";
 
-type UpdatePasswordFormProps = ComponentPropsWithoutRef<typeof AuthCard>;
+type UpdatePasswordFormProps = Omit<
+  ComponentPropsWithoutRef<typeof AuthCard>,
+  "title" | "description" | "children" | "footer"
+>;
 
 export function UpdatePasswordForm(props: UpdatePasswordFormProps) {
   const [password, setPassword] = useState("");

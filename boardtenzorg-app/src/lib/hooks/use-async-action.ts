@@ -11,7 +11,7 @@ type AsyncState<TResult> = {
 };
 
 type UseAsyncActionReturn<TArgs extends unknown[], TResult> = AsyncState<TResult> & {
-  run: AsyncAction<TArgs, TResult>;
+  run: (...args: TArgs) => Promise<TResult | null>;
   reset: () => void;
 };
 
@@ -30,9 +30,20 @@ export function useAsyncAction<TArgs extends unknown[], TResult>(
      * Defaults to exposing the message of the thrown `Error`.
      */
     formatError?: (error: unknown) => string;
+    /**
+     * Optional callback invoked when the action resolves without throwing.
+     * Receives the resolved value.
+     */
+    onSuccess?: (result: TResult) => void;
+    /**
+     * Optional callback invoked when the action throws.
+     * Receives the formatted error string.
+     */
+    onError?: (error: string) => void;
   },
 ): UseAsyncActionReturn<TArgs, TResult> {
-  const customFormatError = options?.formatError;
+  const { formatError, onSuccess, onError } = options ?? {};
+  const customFormatError = formatError;
 
   const [state, setState] = useState<AsyncState<TResult>>({
     error: null,
@@ -51,15 +62,17 @@ export function useAsyncAction<TArgs extends unknown[], TResult>(
       try {
         const result = await action(...args);
         setState({ error: null, isLoading: false, result });
+        onSuccess?.(result);
         return result;
       } catch (error: unknown) {
         const normalizeError = customFormatError ?? defaultFormatError;
         const errorMessage = normalizeError(error);
         setState({ error: errorMessage, isLoading: false, result: null });
+        onError?.(errorMessage);
         return null;
       }
     },
-    [action, customFormatError],
+    [action, customFormatError, onError, onSuccess],
   );
 
   const reset = useCallback(() => {

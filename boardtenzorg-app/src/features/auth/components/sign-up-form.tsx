@@ -11,15 +11,24 @@ import { Label } from "@/components/ui/label";
 import { AuthCard } from "@/features/auth/components/auth-card";
 import { signUpWithEmail } from "@/features/auth/lib/auth-service";
 import { useAsyncAction } from "@/lib/hooks/use-async-action";
+import {
+  USERNAME_HELP_TEXT,
+  USERNAME_PATTERN,
+  USERNAME_REQUIREMENTS,
+} from "@/lib/constants/username";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-type SignUpFormProps = ComponentPropsWithoutRef<typeof AuthCard>;
+type SignUpFormProps = Omit<
+  ComponentPropsWithoutRef<typeof AuthCard>,
+  "title" | "description" | "children" | "footer"
+>;
 
 export function SignUpForm(props: SignUpFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -35,6 +44,19 @@ export function SignUpForm(props: SignUpFormProps) {
         password,
         redirectTo: `${window.location.origin}/profile`,
       });
+
+      if (username) {
+        await fetch("/api/profile/identity", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ username }),
+        }).catch(() => {
+          // Ignore errors; user can complete profile later.
+        });
+      }
+
       router.push("/auth/sign-up-success");
     },
   );
@@ -50,6 +72,11 @@ export function SignUpForm(props: SignUpFormProps) {
     }
 
     setLocalError(null);
+    if (!USERNAME_PATTERN.test(username)) {
+      setLocalError(USERNAME_REQUIREMENTS);
+      return;
+    }
+
     await submitSignUp({ email, password });
   };
 
@@ -89,6 +116,21 @@ export function SignUpForm(props: SignUpFormProps) {
             value={email}
             onChange={handleFieldChange(setEmail)}
           />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="username">Username</Label>
+          <Input
+            id="username"
+            required
+            value={username}
+          onChange={handleFieldChange(setUsername)}
+          placeholder="lowercase, 3-20 chars"
+          pattern={USERNAME_PATTERN.source}
+          title={USERNAME_REQUIREMENTS}
+          minLength={3}
+          maxLength={20}
+        />
+        <p className="text-xs text-muted-foreground">{USERNAME_HELP_TEXT}</p>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="password">Password</Label>
