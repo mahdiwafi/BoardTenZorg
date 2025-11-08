@@ -12,8 +12,9 @@ import {
 } from "@/lib/boardtenzorg";
 import { createClient } from "@/lib/supabase/server";
 
+import { TournamentList } from "@/components/tournaments/tournament-list";
+
 import { UsernameForm } from "./_components/username-form";
-import { TournamentList } from "./_components/tournament-list";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -22,7 +23,7 @@ export default async function ProfilePage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/auth/login");
+    redirect("/auth/login?redirect=/profile");
   }
 
   const [profile, roles, seasonId] = await Promise.all([
@@ -108,10 +109,16 @@ export default async function ProfilePage() {
         </div>
 
         {profile && seasonId ? (
-          <TournamentList tournaments={tournaments} />
+          profile.username ? (
+            <TournamentList tournaments={tournaments} />
+          ) : (
+            <div className="rounded-lg border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground">
+              Set a username first to unlock tournament registration.
+            </div>
+          )
         ) : (
           <div className="rounded-lg border border-dashed border-border px-4 py-12 text-center text-sm text-muted-foreground">
-            Set a username first to unlock tournament registration.
+            Sign in and set a username to register for tournaments.
           </div>
         )}
       </section>

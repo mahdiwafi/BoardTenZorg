@@ -31,7 +31,7 @@ export default async function ProfileHistoryPage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/auth/login");
+    redirect("/auth/login?redirect=/profile/history");
   }
 
   const [profile, seasonId] = await Promise.all([

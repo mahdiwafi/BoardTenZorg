@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { SiteHeader } from "@/components/site-header";
 import {
   getActiveSeasonId,
   getCurrentUserRoles,
@@ -8,6 +8,7 @@ import {
   listSeasonTournaments,
 } from "@/lib/boardtenzorg";
 import { createClient } from "@/lib/supabase/server";
+import { formatSeasonLabel } from "@/lib/utils/season";
 
 import { CreateTournamentForm } from "./_components/create-tournament-form";
 import { FinalizeSeasonButton } from "./_components/finalize-season-button";
@@ -21,7 +22,7 @@ export default async function AdminPage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/auth/login");
+    redirect("/auth/login?redirect=/admin");
   }
 
   const roles = await getCurrentUserRoles();
@@ -32,22 +33,15 @@ export default async function AdminPage() {
   const seasonId = await getActiveSeasonId();
   const season = seasonId ? await getSeasonById(seasonId) : null;
   const tournaments = seasonId ? await listSeasonTournaments(seasonId) : [];
+  const seasonLabel = season
+    ? formatSeasonLabel(season.start_at, season.id)
+    : null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/60">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-4 text-sm">
-          <div className="flex items-center gap-6 font-semibold">
-            <Link href="/">BoardTenZorg</Link>
-            <span className="text-xs uppercase text-muted-foreground">Admin</span>
-          </div>
-          <Link href="/" className="text-xs font-medium uppercase text-muted-foreground hover:text-foreground">
-            Leaderboard
-          </Link>
-        </div>
-      </header>
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <SiteHeader seasonLabel={seasonLabel} isAuthenticated isAdmin />
 
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-12 px-6 py-10">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-12 px-6 py-10">
         <section className="grid gap-6 rounded-lg border border-border bg-card p-6 md:grid-cols-[1fr_auto] md:items-center">
           <div>
             <h1 className="text-2xl font-semibold">Season control</h1>

@@ -1,14 +1,17 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
+import { SiteHeader } from "@/components/site-header";
 import {
   getActiveSeasonId,
   getCurrentUserProfile,
+  getCurrentUserRoles,
   getPlayerHistory,
   getPlayerSeasonStats,
   getSeasonById,
   getUserProfileById,
 } from "@/lib/boardtenzorg";
+import { formatSeasonLabel } from "@/lib/utils/season";
 
 function formatDate(value: string) {
   try {
@@ -25,19 +28,25 @@ function formatDate(value: string) {
 }
 
 type PlayerPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
 export default async function PlayerPage({ params }: PlayerPageProps) {
-  const playerProfile = await getUserProfileById(params.id);
+  const { id } = await params;
+  const playerProfile = await getUserProfileById(id);
   if (!playerProfile) {
     notFound();
   }
 
-  const [seasonId, viewerProfile] = await Promise.all([
+  const [seasonId, viewerProfile, roles] = await Promise.all([
     getActiveSeasonId(),
     getCurrentUserProfile(),
+    getCurrentUserRoles(),
   ]);
+
+  if (!viewerProfile) {
+    redirect(`/auth/login?redirect=/players/${id}`);
+  }
 
   const season = seasonId ? await getSeasonById(seasonId) : null;
   const [history, seasonStats] = seasonId
@@ -47,30 +56,32 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
       ])
     : [[], { rating: 1000, matches_played: 0 }];
 
-  const isSelf = viewerProfile?.id === playerProfile.id;
+  const isSelf = viewerProfile.id === playerProfile.id;
+  const seasonLabel = season
+    ? formatSeasonLabel(season.start_at, season.id)
+    : null;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/60 bg-muted/20">
-        <div className="mx-auto flex w-full max-w-4xl items-center justify-between px-6 py-4 text-sm">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-muted-foreground hover:text-foreground">
-              ← Back to leaderboard
-            </Link>
-            {season ? (
-              <span className="rounded-full bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-                Season {season.id}
-              </span>
-            ) : null}
-          </div>
-          <Link href="/admin" className="text-xs font-medium uppercase text-muted-foreground hover:text-foreground">
-            Admin
-          </Link>
-        </div>
-      </header>
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <SiteHeader
+        seasonLabel={seasonLabel}
+        isAuthenticated
+        isAdmin={roles.includes("admin")}
+      />
 
-      <main className="mx-auto w-full max-w-4xl px-6 py-10">
-        <div className="flex flex-col gap-2">
+      <main className="mx-auto w-full max-w-4xl flex-1 px-6 py-10 space-y-10">
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <Link href="/" className="font-medium text-primary hover:underline">
+            &larr; Back to leaderboard
+          </Link>
+          {seasonLabel ? (
+            <span className="rounded-full border border-border/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide">
+              Season {seasonLabel}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
           <h1 className="text-2xl font-semibold">
             {playerProfile.username ?? playerProfile.id}
           </h1>
@@ -81,7 +92,7 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
           </p>
         </div>
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-3">
+        <section className="grid gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-border bg-card p-4">
             <p className="text-xs uppercase text-muted-foreground">Current MMR</p>
             <p className="mt-2 text-2xl font-semibold">{seasonStats.rating}</p>
@@ -91,26 +102,28 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
             <p className="mt-2 text-2xl font-semibold">{seasonStats.matches_played}</p>
           </div>
           <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs uppercase text-muted-foreground">Profile ID</p>
+            <p className="text-xs uppercase text-muted-foreground">Player ID</p>
             <p className="mt-2 font-mono text-lg">{playerProfile.id}</p>
           </div>
         </section>
 
-        <section className="mt-12">
-          <h2 className="text-lg font-semibold">Match history</h2>
-          <p className="text-sm text-muted-foreground">
-            Latest {history.length} rated matches with MMR changes.
-          </p>
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Match history</h2>
+            <p className="text-sm text-muted-foreground">
+              Latest {history.length} rated matches with MMR changes.
+            </p>
+          </div>
 
-          <div className="mt-4 overflow-hidden rounded-lg border border-border/80 bg-card">
+          <div className="overflow-hidden rounded-lg border border-border/80 bg-card">
             <table className="w-full table-fixed text-sm">
               <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr className="[&>th]:px-3 [&>th]:py-3 [&>th]:text-left">
                   <th className="w-36">Date</th>
                   <th>Opponent</th>
                   <th className="w-28 text-right">Result</th>
-                  <th className="w-24 text-right">Δ MMR</th>
-                  <th className="w-28 text-right">Post</th>
+                  <th className="w-24 text-right">Delta</th>
+                  <th className="w-28 text-right">Post MMR</th>
                   <th className="w-48">Tournament</th>
                 </tr>
               </thead>
@@ -135,9 +148,9 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
                       </td>
                       <td className="px-3 py-3 text-right font-semibold">
                         {event.result === "win" ? (
-                          <span className="text-emerald-500">Win</span>
+                          <span className="text-primary">Win</span>
                         ) : (
-                          <span className="text-rose-500">Loss</span>
+                          <span className="text-destructive">Loss</span>
                         )}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-sm">
@@ -147,7 +160,7 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
                         {event.rating_after}
                       </td>
                       <td className="px-3 py-3 text-sm text-muted-foreground">
-                        {event.tournament_name || "—"}
+                        {event.tournament_name || "Unassigned"}
                       </td>
                     </tr>
                   ))

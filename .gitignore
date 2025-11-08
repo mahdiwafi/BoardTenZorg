@@ -17,7 +17,9 @@
 
 # misc
 .DS_Store
+Thumbs.db
 *.pem
+*.code-workspace
 
 # debug
 npm-debug.log*
@@ -34,3 +36,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# editors
+.vscode
+.idea
+
+# supabase artifacts
+**/supabase/.branches
+**/supabase/.temp
+**/.supabase

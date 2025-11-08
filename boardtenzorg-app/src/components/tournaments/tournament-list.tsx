@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -9,9 +10,15 @@ import { useAsyncAction } from "@/lib/hooks/use-async-action";
 
 type TournamentListProps = {
   tournaments: TournamentWithRegistration[];
+  canRegister?: boolean;
+  loginHref?: string;
 };
 
-export function TournamentList({ tournaments }: TournamentListProps) {
+export function TournamentList({
+  tournaments,
+  canRegister = true,
+  loginHref,
+}: TournamentListProps) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const router = useRouter();
 
@@ -36,6 +43,10 @@ export function TournamentList({ tournaments }: TournamentListProps) {
   });
 
   async function handleRegister(tournamentId: string) {
+    if (!canRegister) {
+      return;
+    }
+
     if (!tournamentId) {
       reset();
       return;
@@ -71,20 +82,30 @@ export function TournamentList({ tournaments }: TournamentListProps) {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <Button
-                onClick={() => handleRegister(tournament.id)}
-                disabled={
-                  tournament.isRegistered ||
-                  tournament.state !== "registered" ||
-                  (isLoading && pendingId === tournament.id)
-                }
-              >
-                {tournament.isRegistered
-                  ? "Registered"
-                  : isLoading && pendingId === tournament.id
-                    ? "Joining..."
-                    : "Register"}
-              </Button>
+              {canRegister ? (
+                <Button
+                  onClick={() => handleRegister(tournament.id)}
+                  disabled={
+                    tournament.isRegistered ||
+                    tournament.state !== "registered" ||
+                    (isLoading && pendingId === tournament.id)
+                  }
+                >
+                  {tournament.isRegistered
+                    ? "Registered"
+                    : isLoading && pendingId === tournament.id
+                      ? "Joining..."
+                      : "Register"}
+                </Button>
+              ) : loginHref ? (
+                <Button asChild variant="outline">
+                  <Link href={loginHref}>Sign in to register</Link>
+                </Button>
+              ) : (
+                <Button disabled variant="outline">
+                  Registration locked
+                </Button>
+              )}
             </div>
           </div>
         ))
@@ -94,3 +115,4 @@ export function TournamentList({ tournaments }: TournamentListProps) {
     </div>
   );
 }
+

@@ -1,40 +1,29 @@
 import Link from "next/link";
 
-import { AuthButton } from "@/features/auth/components/auth-button";
-import { ThemeSwitcher } from "@/components/theme-switcher";
+import { SiteHeader } from "@/components/site-header";
 import {
   getActiveSeasonId,
   getCurrentUserProfile,
+  getCurrentUserRoles,
   getLeaderboard,
   getSeasonById,
   type LeaderboardEntry,
 } from "@/lib/boardtenzorg";
+import { formatSeasonLabel } from "@/lib/utils/season";
 
 const LEADERBOARD_LIMIT = 50;
-const seasonDateFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-  year: "numeric",
-});
-
-function formatSeasonLabel(startAt: string | null, seasonId: string) {
-  if (!startAt) {
-    return seasonId;
-  }
-
-  try {
-    return seasonDateFormatter.format(new Date(startAt));
-  } catch {
-    return seasonId;
-  }
-}
 
 export default async function LeaderboardPage() {
-  const [profile, seasonId] = await Promise.all([
+  const [profile, seasonId, roles] = await Promise.all([
     getCurrentUserProfile(),
     getActiveSeasonId(),
+    getCurrentUserRoles(),
   ]);
 
   const season = seasonId ? await getSeasonById(seasonId) : null;
+  const seasonLabel = season
+    ? formatSeasonLabel(season.start_at, season.id)
+    : null;
   const leaderboard = seasonId
     ? await getLeaderboard(seasonId, {
         limit: LEADERBOARD_LIMIT,
@@ -43,31 +32,29 @@ export default async function LeaderboardPage() {
     : [];
 
   const stickyUserId = profile?.id ?? null;
+  const isAuthenticated = Boolean(profile);
+  const isAdmin = roles.includes("admin");
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/60">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-4 text-sm">
-          <div className="flex items-center gap-6 font-semibold">
-            <Link href="/">BoardTenZorg</Link>
-            {season ? (
-              <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                Season {formatSeasonLabel(season.start_at, season.id)}
-              </span>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-3">
-            <ThemeSwitcher />
-            <AuthButton />
-          </div>
-        </div>
-      </header>
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <SiteHeader
+        seasonLabel={seasonLabel}
+        isAuthenticated={isAuthenticated}
+        isAdmin={isAdmin}
+      />
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-6 py-10">
-        <LeaderboardHeading profileId={profile?.id ?? null} />
+        <LeaderboardHeading
+          profileId={profile?.id ?? null}
+          isAuthenticated={isAuthenticated}
+        />
 
         {seasonId ? (
-          <LeaderboardTable entries={leaderboard} stickyUserId={stickyUserId} />
+          <LeaderboardTable
+            entries={leaderboard}
+            stickyUserId={stickyUserId}
+            isAuthenticated={isAuthenticated}
+          />
         ) : (
           <NoSeasonNotice />
         )}
@@ -87,9 +74,13 @@ export default async function LeaderboardPage() {
 
 type LeaderboardHeadingProps = {
   profileId: string | null;
+  isAuthenticated: boolean;
 };
 
-function LeaderboardHeading({ profileId }: LeaderboardHeadingProps) {
+function LeaderboardHeading({
+  profileId,
+  isAuthenticated,
+}: LeaderboardHeadingProps) {
   return (
     <div className="flex items-end justify-between gap-4">
       <div>
@@ -103,7 +94,14 @@ function LeaderboardHeading({ profileId }: LeaderboardHeadingProps) {
           href={`/players/${profileId}`}
           className="text-sm font-medium text-primary hover:underline"
         >
-          View your history
+          View your public profile
+        </Link>
+      ) : !isAuthenticated ? (
+        <Link
+          href="/auth/login?redirect=/profile/history"
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          Sign in to view your history
         </Link>
       ) : null}
     </div>
@@ -113,9 +111,14 @@ function LeaderboardHeading({ profileId }: LeaderboardHeadingProps) {
 type LeaderboardTableProps = {
   entries: LeaderboardEntry[];
   stickyUserId: string | null;
+  isAuthenticated: boolean;
 };
 
-function LeaderboardTable({ entries, stickyUserId }: LeaderboardTableProps) {
+function LeaderboardTable({
+  entries,
+  stickyUserId,
+  isAuthenticated,
+}: LeaderboardTableProps) {
   const hasEntries = entries.length > 0;
   const showPinnedNotice = Boolean(stickyUserId) && entries.length > LEADERBOARD_LIMIT;
 
@@ -141,6 +144,7 @@ function LeaderboardTable({ entries, stickyUserId }: LeaderboardTableProps) {
                   entry.user_id === stickyUserId &&
                   index >= LEADERBOARD_LIMIT
                 }
+                isAuthenticated={isAuthenticated}
               />
             ))
           ) : (
@@ -160,9 +164,18 @@ function LeaderboardTable({ entries, stickyUserId }: LeaderboardTableProps) {
 type LeaderboardRowProps = {
   entry: LeaderboardEntry;
   isSticky: boolean;
+  isAuthenticated: boolean;
 };
 
-function LeaderboardRow({ entry, isSticky }: LeaderboardRowProps) {
+function LeaderboardRow({
+  entry,
+  isSticky,
+  isAuthenticated,
+}: LeaderboardRowProps) {
+  const targetHref = isAuthenticated
+    ? `/players/${entry.user_id}`
+    : `/auth/login?redirect=${encodeURIComponent(`/players/${entry.user_id}`)}`;
+
   return (
     <tr
       className={`border-t border-border/40 transition-colors hover:bg-muted/30 ${
@@ -175,7 +188,7 @@ function LeaderboardRow({ entry, isSticky }: LeaderboardRowProps) {
       <td className="px-3 py-3">
         <div className="flex flex-col">
           <Link
-            href={`/players/${entry.user_id}`}
+            href={targetHref}
             className="text-sm font-medium hover:underline"
           >
             {entry.username}

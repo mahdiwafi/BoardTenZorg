@@ -1,32 +1,35 @@
-import { AuthButton } from "@/features/auth/components/auth-button";
-import { ThemeSwitcher } from "@/components/theme-switcher";
-import Link from "next/link";
+import { SiteHeader } from "@/components/site-header";
+import {
+  getActiveSeasonId,
+  getCurrentUserProfile,
+  getCurrentUserRoles,
+  getSeasonById,
+} from "@/lib/boardtenzorg";
+import { formatSeasonLabel } from "@/lib/utils/season";
 
-export default function ProfileLayout({
+export default async function ProfileLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [profile, roles, seasonId] = await Promise.all([
+    getCurrentUserProfile(),
+    getCurrentUserRoles(),
+    getActiveSeasonId(),
+  ]);
+
+  const season = seasonId ? await getSeasonById(seasonId) : null;
+  const seasonLabel = season
+    ? formatSeasonLabel(season.start_at, season.id)
+    : null;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/60">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-4 text-sm">
-          <div className="flex items-center gap-6 font-semibold">
-            <Link href="/">BoardTenZorg</Link>
-            <Link
-              href="/"
-              className="text-xs font-medium uppercase text-muted-foreground hover:text-foreground"
-            >
-              Leaderboard
-            </Link>
-          </div>
-          <div className="flex items-center gap-3">
-            <ThemeSwitcher />
-            <AuthButton />
-          </div>
-        </div>
-      </header>
-
+      <SiteHeader
+        seasonLabel={seasonLabel}
+        isAuthenticated={Boolean(profile)}
+        isAdmin={roles.includes("admin")}
+      />
       <main className="mx-auto w-full max-w-5xl px-6 py-10">{children}</main>
     </div>
   );

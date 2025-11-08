@@ -30,11 +30,7 @@ export async function AuthButton() {
     profile = null;
   }
   const fallbackLabel = user.email ?? "Player";
-  const displayLabel = profile
-    ? profile.username
-      ? `[${profile.id}] ${profile.username}`
-      : `[${profile.id}]`
-    : fallbackLabel;
+  const displayLabel = profile?.username ?? profile?.id ?? fallbackLabel;
 
   return (
     <div className="flex items-center gap-3 text-sm">
